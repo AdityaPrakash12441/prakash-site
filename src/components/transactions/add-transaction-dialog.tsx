@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -22,28 +22,34 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Loader2, Sparkles, Upload } from 'lucide-react';
-import { format } from 'date-fns';
+import { CalendarIcon, Loader2, Sparkles, Upload, Camera } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { AllCategories, Category, Transaction } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions';
 import { useFirestore, useUser, addDocumentNonBlocking } from '@/firebase';
 import { collection } from 'firebase/firestore';
+import { parseReceipt } from '@/ai/flows/parse-receipt-flow';
+import Image from 'next/image';
 
 export function AddTransactionDialog() {
   const [open, setOpen] = useState(false);
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
 
   const { user } = useUser();
   const firestore = useFirestore();
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [type, setType] = useState<'income' | 'expense' | ''>('');
+  const [type, setType] = useState<'income' | 'expense' | ''>('expense');
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [category, setCategory] = useState<Category | ''>('');
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
 
@@ -79,9 +85,10 @@ export function AddTransactionDialog() {
   const resetForm = () => {
     setDescription('');
     setAmount('');
-    setType('');
+    setType('expense');
     setDate(new Date());
     setCategory('');
+    setReceiptImage(null);
   }
 
   const handleSave = async () => {
@@ -129,19 +136,119 @@ export function AddTransactionDialog() {
     }
   }
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUri = reader.result as string;
+        setReceiptImage(dataUri);
+        handleReceiptParse(dataUri);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleReceiptParse = async (dataUri: string) => {
+    setIsParsing(true);
+    try {
+        const result = await parseReceipt({ receiptDataUri: dataUri });
+        
+        if (result.merchant) setDescription(result.merchant);
+        if (result.total) setAmount(result.total.toString());
+        if (result.date) {
+            try {
+                // The date might not have a timezone, so parseISO handles it gracefully
+                const parsedDate = parseISO(result.date);
+                setDate(parsedDate);
+            } catch (e) {
+                console.warn("Could not parse date from AI, using today.", e)
+                setDate(new Date());
+            }
+        }
+        
+        toast({
+            title: "Receipt Scanned!",
+            description: "We've pre-filled the form with the receipt details.",
+        });
+
+        // Now, try to categorize it.
+        if (result.merchant) {
+            const categoryResult = await categorizeTransaction({ transactionDetails: result.merchant });
+            setCategory(categoryResult.category);
+        }
+
+    } catch(e) {
+        console.error("Error parsing receipt:", e);
+        toast({
+            title: "Parsing Error",
+            description: "Could not automatically read the receipt.",
+            variant: "destructive"
+        })
+    } finally {
+        setIsParsing(false);
+    }
+  }
+
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+            resetForm();
+        }
+        setOpen(isOpen);
+    }}>
       <DialogTrigger asChild>
         <Button>Add Transaction</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-headline">Add Transaction</DialogTitle>
           <DialogDescription>
-            Add a new transaction to your account. Click save when you're done.
+            Add a new transaction or scan a receipt to get started.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+            <div 
+                className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted/70"
+                onClick={() => fileInputRef.current?.click()}
+            >
+                {isParsing && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="mt-2 text-sm text-muted-foreground">Scanning receipt...</p>
+                    </div>
+                )}
+                {receiptImage ? (
+                    <Image src={receiptImage} alt="Receipt preview" layout="fill" objectFit="contain" className="rounded-lg" />
+                ) : (
+                    <div className="text-center">
+                        <Camera className="mx-auto h-8 w-8 text-muted-foreground" />
+                        <p className="mt-2 text-sm text-muted-foreground">Tap to scan a receipt</p>
+                        <p className="text-xs text-muted-foreground">Use your camera or upload an image</p>
+                    </div>
+                )}
+                 <Input 
+                    id="receipt-upload" 
+                    type="file" 
+                    accept="image/*"
+                    capture="environment"
+                    ref={fileInputRef} 
+                    className="sr-only" 
+                    onChange={handleFileChange}
+                    disabled={isParsing}
+                />
+            </div>
+            <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                    Or enter manually
+                    </span>
+                </div>
+            </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="description" className="text-right">
               Description
@@ -218,24 +325,10 @@ export function AddTransactionDialog() {
               </Button>
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="receipt" className="text-right">
-              Receipt
-            </Label>
-            <div className="col-span-3">
-              <Button asChild variant="outline" className="w-full">
-                <Label htmlFor="receipt-upload" className="cursor-pointer">
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Image
-                </Label>
-              </Button>
-              <Input id="receipt-upload" type="file" className="sr-only" />
-            </div>
-          </div>
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          <Button type="submit" onClick={handleSave} disabled={isSaving || isParsing}>
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save transaction
           </Button>
         </DialogFooter>
