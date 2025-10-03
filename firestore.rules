@@ -1,0 +1,116 @@
+/**
+ * @file Firestore Security Rules for Pennywise Application
+ * @core_philosophy This ruleset enforces a strict user-ownership model, where users can only access their own data.
+ * @data_structure All data is nested under /users/{userId}, ensuring clear ownership.
+ * @key_security_decisions User listing is disallowed.  All write operations are protected by authorization checks.
+ * @denormalization None currently, but future collaborative features would require denormalizing authorization data onto documents.
+ * @structural_segregation All user data is segregated under the /users/{userId} path.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Secure user profiles. Only the authenticated user can read or write their own profile.
+     * @path /users/{userId}
+     * @allow (create) User with ID 'user123' creates their profile. request.auth.uid == 'user123'
+     * @allow (get) User with ID 'user123' reads their profile. request.auth.uid == 'user123'
+     * @allow (update) User with ID 'user123' updates their profile. request.auth.uid == 'user123'
+     * @allow (delete) User with ID 'user123' deletes their profile. request.auth.uid == 'user123'
+     * @deny (create) User with ID 'user456' attempts to create a profile for 'user123'. request.auth.uid != 'user123'
+     * @deny (get) User with ID 'user456' attempts to read the profile of 'user123'. request.auth.uid != 'user123'
+     * @deny (update) User with ID 'user456' attempts to update the profile of 'user123'. request.auth.uid != 'user123'
+     * @deny (delete) User with ID 'user456' attempts to delete the profile of 'user123'. request.auth.uid != 'user123'
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && request.auth.uid == userId;
+      allow update: if isExistingOwner(userId) && request.auth.uid == userId;
+      allow delete: if isExistingOwner(userId) && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Secure transactions for a specific user. Only the authenticated user can manage their own transactions.
+     * @path /users/{userId}/transactions/{transactionId}
+     * @allow (create) User with ID 'user123' creates a transaction. request.auth.uid == 'user123'
+     * @allow (get) User with ID 'user123' reads a transaction. request.auth.uid == 'user123'
+     * @allow (list) User with ID 'user123' lists their transactions. request.auth.uid == 'user123'
+     * @allow (update) User with ID 'user123' updates a transaction. request.auth.uid == 'user123'
+     * @allow (delete) User with ID 'user123' deletes a transaction. request.auth.uid == 'user123'
+     * @deny (create) User with ID 'user456' attempts to create a transaction for 'user123'. request.auth.uid != 'user123'
+     * @deny (get) User with ID 'user456' attempts to read a transaction of 'user123'. request.auth.uid != 'user123'
+     * @deny (list) User with ID 'user456' attempts to list transactions of 'user123'. request.auth.uid != 'user123'
+     * @deny (update) User with ID 'user456' attempts to update a transaction of 'user123'. request.auth.uid != 'user123'
+     * @deny (delete) User with ID 'user456' attempts to delete a transaction of 'user123'. request.auth.uid != 'user123'
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/transactions/{transactionId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId) && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Secure categories for a specific user. Only the authenticated user can manage their own categories.
+     * @path /users/{userId}/categories/{categoryId}
+     * @allow (create) User with ID 'user123' creates a category. request.auth.uid == 'user123'
+     * @allow (get) User with ID 'user123' reads a category. request.auth.uid == 'user123'
+     * @allow (list) User with ID 'user123' lists their categories. request.auth.uid == 'user123'
+     * @allow (update) User with ID 'user123' updates a category. request.auth.uid == 'user123'
+     * @allow (delete) User with ID 'user123' deletes a category. request.auth.uid == 'user123'
+     * @deny (create) User with ID 'user456' attempts to create a category for 'user123'. request.auth.uid != 'user123'
+     * @deny (get) User with ID 'user456' attempts to read a category of 'user123'. request.auth.uid != 'user123'
+     * @deny (list) User with ID 'user456' attempts to list categories of 'user123'. request.auth.uid != 'user123'
+     * @deny (update) User with ID 'user456' attempts to update a category of 'user123'. request.auth.uid != 'user123'
+     * @deny (delete) User with ID 'user456' attempts to delete a category of 'user123'. request.auth.uid != 'user123'
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/categories/{categoryId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId) && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Secure email provider configurations for a specific user. Only the authenticated user can manage their own configurations.
+     * @path /users/{userId}/emailProviders/{emailProviderId}
+     * @allow (create) User with ID 'user123' creates an email provider configuration. request.auth.uid == 'user123'
+     * @allow (get) User with ID 'user123' reads an email provider configuration. request.auth.uid == 'user123'
+     * @allow (list) User with ID 'user123' lists their email provider configurations. request.auth.uid == 'user123'
+     * @allow (update) User with ID 'user123' updates an email provider configuration. request.auth.uid == 'user123'
+     * @allow (delete) User with ID 'user123' deletes an email provider configuration. request.auth.uid == 'user123'
+     * @deny (create) User with ID 'user456' attempts to create an email provider configuration for 'user123'. request.auth.uid != 'user123'
+     * @deny (get) User with ID 'user456' attempts to read an email provider configuration of 'user123'. request.auth.uid != 'user123'
+     * @deny (list) User with ID 'user456' attempts to list email provider configurations of 'user123'. request.auth.uid != 'user123'
+     * @deny (update) User with ID 'user456' attempts to update an email provider configuration of 'user123'. request.auth.uid != 'user123'
+     * @deny (delete) User with ID 'user456' attempts to delete an email provider configuration of 'user123'. request.auth.uid != 'user123'
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/emailProviders/{emailProviderId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId) && request.auth.uid == userId;
+    }
+  }
+
+  // Helper functions
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  function isOwner(userId) {
+    return isSignedIn() && request.auth.uid == userId;
+  }
+
+  function isExistingOwner(userId) {
+    return isOwner(userId) && resource != null;
+  }
+}

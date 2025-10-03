@@ -1,0 +1,228 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the Pennywise application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address.",
+          "format": "email"
+        }
+      },
+      "required": [
+        "id",
+        "email"
+      ]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Represents a financial transaction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the transaction."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Transaction)"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of the transaction.",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount of the transaction."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the transaction."
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "Reference to Category. (Relationship: Category 1:N Transaction)"
+        },
+        "receiptImageUri": {
+          "type": "string",
+          "description": "URI of the receipt image (optional).",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "date",
+        "amount",
+        "description",
+        "categoryId"
+      ]
+    },
+    "Category": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Category",
+      "type": "object",
+      "description": "Represents a category for classifying transactions.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the category."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Category)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the category."
+        },
+        "budget": {
+          "type": "number",
+          "description": "Monthly budget for the category."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "budget"
+      ]
+    },
+    "EmailProvider": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EmailProvider",
+      "type": "object",
+      "description": "Represents an email provider configuration for scanning transaction emails.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the email provider configuration."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N EmailProvider)"
+        },
+        "providerType": {
+          "type": "string",
+          "description": "Type of email provider (e.g., Gmail, IMAP)."
+        },
+        "imapServer": {
+          "type": "string",
+          "description": "IMAP server address."
+        },
+        "imapPort": {
+          "type": "number",
+          "description": "IMAP port number."
+        },
+        "emailAddress": {
+          "type": "string",
+          "description": "Email address for scanning transactions."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "providerType",
+        "imapServer",
+        "imapPort",
+        "emailAddress"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles.  Authorization is based on path: request.auth.uid == userId.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/transactions/{transactionId}",
+        "definition": {
+          "entityName": "Transaction",
+          "schema": {
+            "$ref": "#/backend/entities/Transaction"
+          },
+          "description": "Stores transactions for a specific user. Authorization is based on path: request.auth.uid == userId.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier of the transaction."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/categories/{categoryId}",
+        "definition": {
+          "entityName": "Category",
+          "schema": {
+            "$ref": "#/backend/entities/Category"
+          },
+          "description": "Stores categories for a specific user. Authorization is based on path: request.auth.uid == userId.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "categoryId",
+              "description": "The unique identifier of the category."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/emailProviders/{emailProviderId}",
+        "definition": {
+          "entityName": "EmailProvider",
+          "schema": {
+            "$ref": "#/backend/entities/EmailProvider"
+          },
+          "description": "Stores email provider configurations for a specific user. Authorization is based on path: request.auth.uid == userId.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "emailProviderId",
+              "description": "The unique identifier of the email provider configuration."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure security, scalability, and ease of debugging, adhering to the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. User-owned data is stored under the `/users/{userId}` path, providing secure and straightforward access control. Denormalization is employed to avoid hierarchical authorization dependencies. Specifically, authorization-relevant data from parent documents (if any in future collaborative features) would be copied to subcollection documents, eliminating the need for `get()` calls in security rules.\n\n**Structure Highlights:**\n\n*   **/users/{userId}**: Stores user-specific data. Transactions, Categories, and EmailProviders are all stored as subcollections of the user document, thus achieving simple path-based access control. This structure facilitates simple, robust, and debuggable security rules based on `request.auth.uid`.\n*   **/users/{userId}/transactions/{transactionId}**: Stores individual transaction data.  This path enables secure listing of transactions for a specific user.\n*   **/users/{userId}/categories/{categoryId}**: Stores transaction categories defined by the user. This path enables secure listing of categories for a specific user.\n*   **/users/{userId}/emailProviders/{emailProviderId}**: Stores email provider configurations for the user. This path enables secure listing of email providers for a specific user.\n\n**Authorization Independence and QAPs:**\n\nAuthorization Independence is achieved by structuring user-owned data under `/users/{userId}`. Since all entities are user-owned with a 1:N relationship, denormalization is not strictly required at this stage. However, if collaborative features are introduced, any authorization context would be denormalized into subcollection documents.  QAPs are supported by the segregation of user data into distinct paths, allowing for secure list operations scoped to the authenticated user (`request.auth.uid`)."
+  }
+}
