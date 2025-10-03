@@ -11,10 +11,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { parseTransactionDetails } from '@/ai/flows/parse-transaction-details';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { updateProfile } from 'firebase/auth';
 import { doc, updateDoc, collection, query, orderBy } from 'firebase/firestore';
@@ -36,8 +34,6 @@ export default function SettingsPage() {
     const firestore = useFirestore();
     const [name, setName] = useState('');
     const [isSavingProfile, setIsSavingProfile] = useState(false);
-    const [emailBody, setEmailBody] = useState('');
-    const [isParsing, setIsParsing] = useState(false);
 
     const transactionsQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
@@ -123,38 +119,6 @@ export default function SettingsPage() {
         })
     };
 
-    const handleParseEmail = async () => {
-        if (!emailBody) {
-            toast({
-                title: "Email content needed",
-                description: "Please paste the body of a transaction email.",
-                variant: "destructive"
-            });
-            return;
-        }
-        setIsParsing(true);
-        try {
-            const result = await parseTransactionDetails({ emailBody });
-            toast({
-                title: "Email Parsed Successfully!",
-                description: (
-                    <pre className="mt-2 w-[340px] rounded-md bg-slate-950 p-4">
-                        <code className="text-white">{JSON.stringify(result.transactionDetails, null, 2)}</code>
-                    </pre>
-                ),
-            });
-        } catch (e) {
-            console.error(e);
-            toast({
-                title: "Uh oh! Something went wrong.",
-                description: "There was a problem parsing the email.",
-                variant: "destructive"
-            });
-        } finally {
-            setIsParsing(false);
-        }
-    };
-
   return (
     <div className="space-y-6">
       <div>
@@ -192,25 +156,6 @@ export default function SettingsPage() {
             <Button variant="outline">
                 <GoogleIcon className="mr-2 h-4 w-4" />
                 Connect Gmail Account
-            </Button>
-        </CardContent>
-      </Card>
-      
-      <Card>
-        <CardHeader>
-            <CardTitle>AI Tools</CardTitle>
-            <CardDescription>Test the AI-powered transaction parser by pasting an email body below.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            <Textarea 
-                placeholder="Paste your transaction email content here..." 
-                value={emailBody}
-                onChange={(e) => setEmailBody(e.target.value)}
-                rows={6}
-            />
-            <Button onClick={handleParseEmail} disabled={isParsing}>
-                {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Parse Transaction
             </Button>
         </CardContent>
       </Card>
