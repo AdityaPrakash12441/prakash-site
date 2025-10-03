@@ -14,6 +14,7 @@ import {
   Target,
   Settings,
   CircleHelp,
+  ScanLine,
 } from 'lucide-react';
 import { PennywiseIcon } from './icons';
 
@@ -21,6 +22,7 @@ const links = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/transactions', label: 'Transactions', icon: Wallet },
   { href: '/dashboard/budgets', label: 'Budgets', icon: Target },
+  { href: '/dashboard/scan-receipt', label: 'Scan Receipt', icon: ScanLine },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
