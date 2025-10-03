@@ -16,7 +16,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { transactions } from '@/lib/data';
 import type { Category, Transaction } from '@/lib/types';
 import { Button } from '../ui/button';
 import {
@@ -37,6 +36,10 @@ import {
 import { format } from 'date-fns';
 import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
+import { useUser, useFirestore, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, query, orderBy, doc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '../ui/skeleton';
 
 const categoryDetails: Record<
   Category,
@@ -60,6 +63,47 @@ const categoryDetails: Record<
 };
 
 export function TransactionList() {
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const { toast } = useToast();
+
+  const transactionsQuery = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return query(collection(firestore, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
+  }, [user, firestore]);
+
+  const { data: transactions, isLoading, error } = useCollection<Transaction>(transactionsQuery);
+
+  const handleDelete = (transactionId: string) => {
+    if (!user || !firestore) return;
+
+    const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
+    deleteDocumentNonBlocking(docRef);
+    toast({
+      title: "Transaction Deleted",
+      description: "The transaction has been successfully deleted.",
+    })
+  }
+
+  if (isLoading) {
+    return (
+        <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center space-x-4 p-2">
+                    <Skeleton className="h-10 w-1/4" />
+                    <Skeleton className="h-10 w-1/4" />
+                    <Skeleton className="h-10 w-1/4" />
+                    <Skeleton className="h-10 w-1/4" />
+                </div>
+            ))}
+        </div>
+    )
+  }
+
+  if (error) {
+    return <p className="text-red-500">Error loading transactions: {error.message}</p>;
+  }
+
   return (
     <Table>
       <TableHeader>
@@ -74,7 +118,7 @@ export function TransactionList() {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {transactions.map((transaction) => {
+        {transactions && transactions.map((transaction) => {
           const { icon: Icon, color } = categoryDetails[transaction.category];
           return (
             <TableRow key={transaction.id}>
@@ -99,10 +143,10 @@ export function TransactionList() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem disabled>
                       <Pencil className="mr-2 h-4 w-4" /> Edit
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDelete(transaction.id)}>
                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -111,6 +155,11 @@ export function TransactionList() {
             </TableRow>
           );
         })}
+        {transactions?.length === 0 && (
+            <TableRow>
+                <TableCell colSpan={5} className="text-center h-24">No transactions yet.</TableCell>
+            </TableRow>
+        )}
       </TableBody>
     </Table>
   );

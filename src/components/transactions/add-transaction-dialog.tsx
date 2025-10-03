@@ -25,15 +25,26 @@ import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon, Loader2, Sparkles, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { AllCategories, Category } from '@/lib/types';
+import { AllCategories, Category, Transaction } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions';
+import { useFirestore, useUser, addDocumentNonBlocking } from '@/firebase';
+import { collection } from 'firebase/firestore';
 
 export function AddTransactionDialog() {
   const [open, setOpen] = useState(false);
   const [isCategorizing, setIsCategorizing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { user } = useUser();
+  const firestore = useFirestore();
+
   const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [type, setType] = useState<'income' | 'expense' | ''>('');
+  const [date, setDate] = useState<Date | undefined>(new Date());
   const [category, setCategory] = useState<Category | ''>('');
+
   const { toast } = useToast();
 
   const handleAiCategorize = async () => {
@@ -65,6 +76,59 @@ export function AddTransactionDialog() {
     }
   };
 
+  const resetForm = () => {
+    setDescription('');
+    setAmount('');
+    setType('');
+    setDate(new Date());
+    setCategory('');
+  }
+
+  const handleSave = async () => {
+    if (!user || !firestore) return;
+    if (!description || !amount || !type || !date || !category) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill out all fields to add a transaction.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+        const newTransaction: Omit<Transaction, 'id'> = {
+            userId: user.uid,
+            description,
+            amount: parseFloat(amount),
+            type,
+            date: date.toISOString(),
+            category,
+        };
+
+        const transactionsCol = collection(firestore, 'users', user.uid, 'transactions');
+        await addDocumentNonBlocking(transactionsCol, newTransaction);
+        
+        toast({
+            title: "Transaction added",
+            description: "Your new transaction has been saved.",
+        });
+
+        resetForm();
+        setOpen(false);
+
+    } catch (error) {
+        console.error("Error adding transaction:", error);
+        toast({
+            title: "Error",
+            description: "Could not save transaction. Please try again.",
+            variant: "destructive"
+        });
+    } finally {
+        setIsSaving(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -88,13 +152,13 @@ export function AddTransactionDialog() {
             <Label htmlFor="amount" className="text-right">
               Amount
             </Label>
-            <Input id="amount" type="number" placeholder="0.00" className="col-span-3" />
+            <Input id="amount" type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="type" className="text-right">
               Type
             </Label>
-            <Select>
+            <Select value={type} onValueChange={(value) => setType(value as 'income' | 'expense' | '')}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
@@ -114,15 +178,15 @@ export function AddTransactionDialog() {
                   variant={'outline'}
                   className={cn(
                     'col-span-3 justify-start text-left font-normal',
-                    !Date.now() && 'text-muted-foreground'
+                    !date && 'text-muted-foreground'
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(Date.now(), 'PPP')}
+                  {date ? format(date, 'PPP') : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
-                <Calendar mode="single" initialFocus />
+                <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
               </PopoverContent>
             </Popover>
           </div>
@@ -170,7 +234,10 @@ export function AddTransactionDialog() {
           </div>
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={() => setOpen(false)}>Save transaction</Button>
+          <Button type="submit" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save transaction
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
