@@ -186,11 +186,13 @@ export default function ScanReceiptPage() {
       try {
           const result = await parseReceipt({ receiptDataUri: dataUri });
           
-          if (result.merchant) setDescription(result.merchant);
-          if (result.total) setAmount(result.total.toString());
+          setDescription(result.merchant || '');
+          setAmount(result.total ? result.total.toString() : '');
+
           if (result.date) {
               try {
                   const parsedDate = new Date(result.date);
+                  // Check if the parsed date is valid, otherwise use today's date
                   if (!isNaN(parsedDate.getTime())) {
                     setDate(parsedDate);
                   } else {
@@ -403,5 +405,3 @@ export default function ScanReceiptPage() {
     </div>
   );
 }
-
-    
