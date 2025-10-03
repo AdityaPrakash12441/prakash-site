@@ -14,8 +14,8 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Loader2, Sparkles, Camera, CheckCircle } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { CalendarIcon, Loader2, Sparkles, Camera, CheckCircle, Upload, Video } from 'lucide-react';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { AllCategories, Category, Transaction } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +24,7 @@ import { useFirestore, useUser, addDocumentNonBlocking } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import { parseReceipt } from '@/ai/flows/parse-receipt-flow';
 import Image from 'next/image';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 export default function ScanReceiptPage() {
     const [isCategorizing, setIsCategorizing] = useState(false);
@@ -40,21 +41,62 @@ export default function ScanReceiptPage() {
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [category, setCategory] = useState<Category | ''>('');
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
+
+    const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
   
     const fileInputRef = useRef<HTMLInputElement>(null);
   
     const { toast } = useToast();
+
+    useEffect(() => {
+        const getCameraPermission = async () => {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.error('Camera API not available.');
+            setHasCameraPermission(false);
+            return;
+          }
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            setHasCameraPermission(true);
+    
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+            }
+          } catch (error) {
+            console.error('Error accessing camera:', error);
+            setHasCameraPermission(false);
+            toast({
+              variant: 'destructive',
+              title: 'Camera Access Denied',
+              description: 'Please enable camera permissions in your browser settings to use this feature.',
+            });
+          }
+        };
+    
+        getCameraPermission();
+    
+        return () => {
+          if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+          }
+        };
+      }, [toast]);
   
     const handleAiCategorize = async (details: string) => {
       if (!details) return;
       setIsCategorizing(true);
       try {
           const result = await categorizeTransaction({ transactionDetails: details });
-          setCategory(result.category);
-          toast({
-              title: "Categorized!",
-              description: `Transaction categorized as ${result.category} with ${Math.round(result.confidence * 100)}% confidence.`
-          })
+          if(result.category) {
+            setCategory(result.category);
+            toast({
+                title: "Categorized!",
+                description: `Transaction categorized as ${result.category} with ${Math.round(result.confidence * 100)}% confidence.`
+            })
+          }
       } catch(e) {
           console.error(e);
           toast({
@@ -148,10 +190,7 @@ export default function ScanReceiptPage() {
           if (result.total) setAmount(result.total.toString());
           if (result.date) {
               try {
-                  // The date can come in various formats, so we try to parse it flexibly.
-                  // `parseISO` is strict, so we create a new Date object which is more lenient.
                   const parsedDate = new Date(result.date);
-                  // Check if the date is valid
                   if (!isNaN(parsedDate.getTime())) {
                     setDate(parsedDate);
                   } else {
@@ -174,7 +213,7 @@ export default function ScanReceiptPage() {
           setIsParsed(true);
 
           if (result.merchant) {
-              handleAiCategorize(result.merchant);
+              await handleAiCategorize(result.merchant);
           }
   
       } catch(e) {
@@ -189,6 +228,20 @@ export default function ScanReceiptPage() {
       }
     }
 
+    const handleCapture = () => {
+        if (videoRef.current && canvasRef.current) {
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+            const dataUri = canvas.toDataURL('image/png');
+            setReceiptImage(dataUri);
+            handleReceiptParse(dataUri);
+        }
+    };
+
   return (
     <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -197,34 +250,54 @@ export default function ScanReceiptPage() {
         <div className="grid gap-8 md:grid-cols-2">
             <Card className="flex flex-col">
                 <CardHeader>
-                    <CardTitle>Upload Receipt</CardTitle>
+                    <CardTitle>Scan or Upload Receipt</CardTitle>
                     <CardDescription>Use your camera to scan a receipt or upload an image file.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-grow flex items-center justify-center">
-                    <div 
-                        className="relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted/70"
-                        onClick={() => fileInputRef.current?.click()}
-                    >
+                <CardContent className="flex-grow flex flex-col items-center justify-center">
+                    <div className="w-full">
+                    {hasCameraPermission === null && (
+                         <div className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <p className="mt-2 text-sm text-muted-foreground">Requesting camera...</p>
+                         </div>
+                    )}
+                    {hasCameraPermission === false && (
+                         <Alert variant="destructive">
+                            <Video className="h-4 w-4" />
+                            <AlertTitle>Camera Access Required</AlertTitle>
+                            <AlertDescription>
+                                Please allow camera access in your browser settings to use this feature. You can still upload a file manually.
+                            </AlertDescription>
+                        </Alert>
+                    )}
+                    <div className="relative">
                         {isParsing && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10 rounded-lg">
                                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                 <p className="mt-2 text-sm text-muted-foreground">Scanning receipt...</p>
                             </div>
                         )}
-                        {receiptImage ? (
-                            <Image src={receiptImage} alt="Receipt preview" layout="fill" objectFit="contain" className="rounded-lg p-2" />
+                        {receiptImage && !isParsing ? (
+                            <Image src={receiptImage} alt="Receipt preview" width={400} height={300} className="rounded-lg w-full object-contain" />
                         ) : (
-                            <div className="text-center p-4">
-                                <Camera className="mx-auto h-12 w-12 text-muted-foreground" />
-                                <p className="mt-4 text-sm font-semibold text-foreground">Tap to scan a receipt</p>
-                                <p className="mt-1 text-xs text-muted-foreground">Use your camera to automatically capture and analyze a receipt.</p>
-                            </div>
+                            <video ref={videoRef} className={cn("w-full aspect-video rounded-md bg-muted", hasCameraPermission ? 'block' : 'hidden')} autoPlay playsInline muted />
                         )}
+                    </div>
+                    <canvas ref={canvasRef} className="hidden"></canvas>
+                    </div>
+                    <div className="flex gap-4 mt-4 w-full">
+                        {hasCameraPermission && (
+                             <Button onClick={handleCapture} className="flex-1" disabled={isParsing}>
+                                <Camera className="mr-2 h-4 w-4" /> Capture Photo
+                            </Button>
+                        )}
+                        <Button variant="outline" className="flex-1" onClick={() => fileInputRef.current?.click()}>
+                            <Upload className="mr-2 h-4 w-4" /> Upload File
+                        </Button>
                         <Input 
                             id="receipt-upload" 
                             type="file" 
                             accept="image/*"
-                            capture="environment"
                             ref={fileInputRef} 
                             className="sr-only" 
                             onChange={handleFileChange}
@@ -242,7 +315,7 @@ export default function ScanReceiptPage() {
                     {!isParsed && !isParsing && (
                         <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
                             <Sparkles className="h-8 w-8 mb-2"/>
-                            <p>Upload a receipt to get started.</p>
+                            <p>Scan or upload a receipt to get started.</p>
                             <p className="text-sm">Details will appear here automatically.</p>
                         </div>
                     )}
@@ -330,3 +403,5 @@ export default function ScanReceiptPage() {
     </div>
   );
 }
+
+    
