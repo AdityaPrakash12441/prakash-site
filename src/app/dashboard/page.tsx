@@ -5,13 +5,13 @@ import {
     CardHeader,
     CardTitle,
   } from '@/components/ui/card';
-  import { DollarSign, CreditCard, Landmark } from 'lucide-react';
+  import { DollarSign, CreditCard, Landmark, Target } from 'lucide-react';
 import { OverviewChart } from '@/components/dashboard/overview-chart';
 import { RecentTransactions } from '@/components/dashboard/recent-transactions';
 import { CategoryChart } from '@/components/dashboard/category-chart';
-import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
-import { collection, query } from 'firebase/firestore';
-import type { Transaction } from '@/lib/types';
+import { useCollection, useDoc, useFirestore, useUser, useMemoFirebase } from '@/firebase';
+import { collection, query, doc } from 'firebase/firestore';
+import type { Transaction, UserProfile } from '@/lib/types';
 import { useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -19,22 +19,30 @@ export default function DashboardPage() {
     const { user } = useUser();
     const firestore = useFirestore();
 
+    const userDocRef = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return doc(firestore, 'users', user.uid);
+      }, [user, firestore]);
+    const { data: userProfile, isLoading: isLoadingUserProfile } = useDoc<UserProfile>(userDocRef);
+
     const transactionsQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
         return query(collection(firestore, 'users', user.uid, 'transactions'));
     }, [user, firestore]);
 
-    const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
+    const { data: transactions, isLoading: isLoadingTransactions } = useCollection<Transaction>(transactionsQuery);
 
-    const { totalIncome, totalExpenses, balance } = useMemo(() => {
-        if (!transactions) {
-            return { totalIncome: 0, totalExpenses: 0, balance: 0 };
+    const { totalExpenses, remainingBudget } = useMemo(() => {
+        if (!transactions || !userProfile) {
+            return { totalExpenses: 0, remainingBudget: 0 };
         }
-        const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
         const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
-        const balance = totalIncome - totalExpenses;
-        return { totalIncome, totalExpenses, balance };
-    }, [transactions]);
+        const monthlyBudget = userProfile?.monthlyBudget || 0;
+        const remainingBudget = monthlyBudget - totalExpenses;
+        return { totalExpenses, remainingBudget };
+    }, [transactions, userProfile]);
+
+    const isLoading = isLoadingTransactions || isLoadingUserProfile;
     
   return (
     <div className="space-y-4">
@@ -43,14 +51,14 @@ export default function DashboardPage() {
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
-                    Total Income
+                    Monthly Budget
                     </CardTitle>
-                    <Landmark className="h-4 w-4 text-muted-foreground" />
+                    <Target className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">₹{totalIncome.toFixed(2)}</div> }
+                    {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">₹{(userProfile?.monthlyBudget || 0).toFixed(2)}</div> }
                     <p className="text-xs text-muted-foreground">
-                    This month
+                    This month's spending goal
                     </p>
                 </CardContent>
             </Card>
@@ -70,13 +78,13 @@ export default function DashboardPage() {
             </Card>
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Balance</CardTitle>
+                    <CardTitle className="text-sm font-medium">Remaining Budget</CardTitle>
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">₹{balance.toFixed(2)}</div> }
+                {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">₹{remainingBudget.toFixed(2)}</div> }
                     <p className="text-xs text-muted-foreground">
-                    Current balance
+                    Left to spend this month
                     </p>
                 </CardContent>
             </Card>
