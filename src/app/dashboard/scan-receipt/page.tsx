@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,18 +45,11 @@ export default function ScanReceiptPage() {
   
     const { toast } = useToast();
   
-    const handleAiCategorize = async () => {
-      if (!description) {
-          toast({
-              title: "Description needed",
-              description: "Please enter a description to categorize.",
-              variant: "destructive"
-          })
-        return;
-      }
+    const handleAiCategorize = async (details: string) => {
+      if (!details) return;
       setIsCategorizing(true);
       try {
-          const result = await categorizeTransaction({ transactionDetails: description });
+          const result = await categorizeTransaction({ transactionDetails: details });
           setCategory(result.category);
           toast({
               title: "Categorized!",
@@ -82,6 +75,9 @@ export default function ScanReceiptPage() {
       setCategory('');
       setReceiptImage(null);
       setIsParsed(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   
     const handleSave = async () => {
@@ -104,7 +100,7 @@ export default function ScanReceiptPage() {
               type,
               date: date.toISOString(),
               category,
-              // TODO: Add receiptImageUri after implementing Firebase Storage
+              receiptImageUri: receiptImage || undefined,
           };
   
           const transactionsCol = collection(firestore, 'users', user.uid, 'transactions');
@@ -152,12 +148,22 @@ export default function ScanReceiptPage() {
           if (result.total) setAmount(result.total.toString());
           if (result.date) {
               try {
-                  const parsedDate = parseISO(result.date);
-                  setDate(parsedDate);
+                  // The date can come in various formats, so we try to parse it flexibly.
+                  // `parseISO` is strict, so we create a new Date object which is more lenient.
+                  const parsedDate = new Date(result.date);
+                  // Check if the date is valid
+                  if (!isNaN(parsedDate.getTime())) {
+                    setDate(parsedDate);
+                  } else {
+                    console.warn("Could not parse date from AI, using today.")
+                    setDate(new Date());
+                  }
               } catch (e) {
                   console.warn("Could not parse date from AI, using today.", e)
                   setDate(new Date());
               }
+          } else {
+            setDate(new Date());
           }
           
           toast({
@@ -168,7 +174,7 @@ export default function ScanReceiptPage() {
           setIsParsed(true);
 
           if (result.merchant) {
-              handleAiCategorize();
+              handleAiCategorize(result.merchant);
           }
   
       } catch(e) {
@@ -192,7 +198,7 @@ export default function ScanReceiptPage() {
             <Card className="flex flex-col">
                 <CardHeader>
                     <CardTitle>Upload Receipt</CardTitle>
-                    <CardDescription>Upload an image or use your camera to scan a receipt.</CardDescription>
+                    <CardDescription>Use your camera to scan a receipt or upload an image file.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-center justify-center">
                     <div 
@@ -206,12 +212,12 @@ export default function ScanReceiptPage() {
                             </div>
                         )}
                         {receiptImage ? (
-                            <Image src={receiptImage} alt="Receipt preview" layout="fill" objectFit="contain" className="rounded-lg" />
+                            <Image src={receiptImage} alt="Receipt preview" layout="fill" objectFit="contain" className="rounded-lg p-2" />
                         ) : (
-                            <div className="text-center">
+                            <div className="text-center p-4">
                                 <Camera className="mx-auto h-12 w-12 text-muted-foreground" />
-                                <p className="mt-4 text-sm text-muted-foreground">Tap to scan a receipt</p>
-                                <p className="text-xs text-muted-foreground">Use your camera or upload an image</p>
+                                <p className="mt-4 text-sm font-semibold text-foreground">Tap to scan a receipt</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Use your camera to automatically capture and analyze a receipt.</p>
                             </div>
                         )}
                         <Input 
@@ -235,7 +241,9 @@ export default function ScanReceiptPage() {
                 <CardContent className="space-y-4">
                     {!isParsed && !isParsing && (
                         <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+                            <Sparkles className="h-8 w-8 mb-2"/>
                             <p>Upload a receipt to get started.</p>
+                            <p className="text-sm">Details will appear here automatically.</p>
                         </div>
                     )}
                      {(isParsing || isParsed) && (
@@ -299,7 +307,7 @@ export default function ScanReceiptPage() {
                             <Button
                                 variant="outline"
                                 size="icon"
-                                onClick={handleAiCategorize}
+                                onClick={() => handleAiCategorize(description)}
                                 disabled={isCategorizing || !description}
                                 aria-label="Categorize with AI"
                             >

@@ -54,7 +54,7 @@ export const AllCategories: Category[] = [
 ];
 
 export type Budget = {
-  id?: string;
+  id: string;
   userId: string;
   category: Category;
   amount: number;
