@@ -16,8 +16,12 @@
           "format": "email"
         },
         "name": {
-            "type": "string",
-            "description": "User's display name."
+          "type": "string",
+          "description": "User's display name."
+        },
+        "monthlyBudget": {
+          "type": "number",
+          "description": "User's total monthly budget."
         }
       },
       "required": [

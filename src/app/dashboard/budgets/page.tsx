@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import type { Budget, Category, Transaction } from '@/lib/types';
+import type { Budget, Category, Transaction, UserProfile } from '@/lib/types';
 import { AllCategories } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, doc, writeBatch } from 'firebase/firestore';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, doc, writeBatch, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +20,12 @@ export default function BudgetsPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [user, firestore]);
+  const { data: userProfile, isLoading: isLoadingUserProfile } = useDoc<UserProfile>(userDocRef);
 
   const budgetsQuery = useMemoFirebase(() => {
     if (!user || !firestore) return null;
@@ -36,6 +42,7 @@ export default function BudgetsPage() {
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<Transaction>(transactionsQuery);
 
   const [editingBudgets, setEditingBudgets] = useState<Record<string, string>>({});
+  const [totalBudget, setTotalBudget] = useState('');
 
   useEffect(() => {
     if (budgets) {
@@ -49,6 +56,12 @@ export default function BudgetsPage() {
     }
   }, [budgets]);
 
+  useEffect(() => {
+    if (userProfile?.monthlyBudget) {
+      setTotalBudget(userProfile.monthlyBudget.toString());
+    }
+  }, [userProfile]);
+
   const handleBudgetChange = (category: Category, value: string) => {
     setEditingBudgets(prev => ({ ...prev, [category]: value }));
   };
@@ -59,6 +72,7 @@ export default function BudgetsPage() {
     
     const batch = writeBatch(firestore);
 
+    // Save category budgets
     for (const category of AllCategories) {
         const existingBudget = budgets?.find(b => b.category === category);
         const newAmountStr = editingBudgets[category];
@@ -66,13 +80,11 @@ export default function BudgetsPage() {
 
         if (newAmount !== null && !isNaN(newAmount)) {
             if (existingBudget) {
-                // Update existing budget if amount changed
                 if (existingBudget.amount !== newAmount) {
                     const budgetRef = doc(firestore, 'users', user.uid, 'categories', existingBudget.id);
                     batch.update(budgetRef, { amount: newAmount });
                 }
             } else {
-                // Create new budget
                 const newBudgetRef = doc(collection(firestore, 'users', user.uid, 'categories'));
                 batch.set(newBudgetRef, {
                     userId: user.uid,
@@ -83,9 +95,17 @@ export default function BudgetsPage() {
         }
     }
 
-
     try {
         await batch.commit();
+
+        // Save total budget
+        const newTotalBudget = parseFloat(totalBudget);
+        if (!isNaN(newTotalBudget) && userDocRef) {
+          await updateDoc(userDocRef, { monthlyBudget: newTotalBudget });
+        } else if (totalBudget === '' && userDocRef) {
+          await updateDoc(userDocRef, { monthlyBudget: null });
+        }
+        
         toast({
             title: "Budgets Saved",
             description: "Your budget changes have been saved successfully.",
@@ -112,7 +132,15 @@ export default function BudgetsPage() {
     }, {} as Record<Category, number>);
   }, [transactions]);
 
-  const isLoading = isLoadingBudgets || isLoadingTransactions;
+  const totalSpent = useMemo(() => {
+    return Object.values(spendingByCategory).reduce((sum, amount) => sum + amount, 0);
+  }, [spendingByCategory]);
+
+  const totalBudgetAmount = parseFloat(totalBudget) || 0;
+  const totalRemaining = totalBudgetAmount - totalSpent;
+  const totalProgress = totalBudgetAmount > 0 ? (totalSpent / totalBudgetAmount) * 100 : 0;
+
+  const isLoading = isLoadingBudgets || isLoadingTransactions || isLoadingUserProfile;
 
   const displayCategories = AllCategories.filter(c => !['Salary', 'Bonus', 'Investment', 'Withdrawal'].includes(c));
 
@@ -128,7 +156,58 @@ export default function BudgetsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Budgets</CardTitle>
+          <CardTitle>Total Monthly Budget</CardTitle>
+          <CardDescription>Set a total budget for all your spending this month.</CardDescription>
+        </CardHeader>
+        <CardContent>
+        {isLoading ? (
+            <div className="space-y-2">
+                <div className="flex justify-between items-center gap-4">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-8 w-40" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-4 w-36" />
+                </div>
+            </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex justify-between items-center gap-4">
+                <Label htmlFor="total-budget" className="font-medium whitespace-nowrap text-lg">Your Goal</Label>
+                <div className="flex items-center gap-2 w-full max-w-xs">
+                    <span className="text-muted-foreground">₹</span>
+                    <Input
+                        id="total-budget"
+                        type="number"
+                        placeholder="e.g., 30000"
+                        value={totalBudget}
+                        onChange={(e) => setTotalBudget(e.target.value)}
+                        className="h-9 text-lg font-semibold"
+                    />
+                </div>
+            </div>
+            {totalBudgetAmount > 0 && (
+              <>
+                <Progress value={totalProgress} className="h-4" />
+                <div className="flex justify-between font-medium">
+                  <span>Spent: ₹{totalSpent.toFixed(2)}</span>
+                  <span className={cn(totalRemaining < 0 ? 'text-red-500' : '')}>
+                    {totalRemaining >= 0 ? `₹${totalRemaining.toFixed(2)} remaining` : `₹${Math.abs(totalRemaining).toFixed(2)} over`}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        </CardContent>
+      </Card>
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Category Budgets</CardTitle>
           <CardDescription>Set and track your spending for each category.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

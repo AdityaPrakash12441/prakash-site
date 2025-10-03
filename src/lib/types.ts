@@ -1,3 +1,4 @@
+'use client';
 
 export type Transaction = {
   id: string;
@@ -9,6 +10,13 @@ export type Transaction = {
   category: Category;
   receiptImageUri?: string;
 };
+
+export type UserProfile = {
+  id: string;
+  email: string;
+  name: string;
+  monthlyBudget?: number;
+}
 
 export type Category = 
   | 'Groceries'
