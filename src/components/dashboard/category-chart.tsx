@@ -21,10 +21,12 @@ import { collection, query, where } from 'firebase/firestore';
 import { Skeleton } from '../ui/skeleton';
 
 const chartConfig = AllCategories.reduce((acc, category, index) => {
-    acc[category] = {
-      label: category,
-      color: `hsl(var(--chart-${(index % 5) + 1}))`,
-    };
+    if (category) {
+        acc[category] = {
+            label: category,
+            color: `hsl(var(--chart-${(index % 5) + 1}))`,
+        };
+    }
     return acc;
   }, {} as ChartConfig);
   
@@ -45,10 +47,12 @@ export function CategoryChart() {
     const categoryTotals = React.useMemo(() => {
         if (!expenses) return {};
         return expenses.reduce((acc, transaction) => {
-            if (!acc[transaction.category]) {
-                acc[transaction.category] = 0;
+            if (transaction.category) {
+                if (!acc[transaction.category]) {
+                    acc[transaction.category] = 0;
+                }
+                acc[transaction.category] += transaction.amount;
             }
-            acc[transaction.category] += transaction.amount;
             return acc;
         }, {} as Record<Category, number>);
     }, [expenses]);
@@ -128,7 +132,9 @@ export function CategoryChart() {
                     </g>
                   )}
                   onMouseOver={(_, index) => {
+                    if (chartData[index]) {
                       setActiveCategory(chartData[index].category)
+                    }
                   }}
                   onMouseLeave={() => setActiveCategory(null)}
                 />
@@ -148,7 +154,7 @@ export function CategoryChart() {
                 {activeCategory}
             </div>
             <div className="text-muted-foreground">
-                ${chartData.find(d => d.category === activeCategory)?.total.toFixed(2)}
+                ₹{chartData.find(d => d.category === activeCategory)?.total.toFixed(2)}
                 {' / '}
                 {allTotal > 0 ? (((chartData.find(d => d.category === activeCategory)?.total || 0) / allTotal) * 100).toFixed(1) : 0}%
             </div>
@@ -156,7 +162,7 @@ export function CategoryChart() {
         ) : (
             <>
             <div className="font-medium">Total Expenses</div>
-            <div className="text-muted-foreground">${allTotal.toFixed(2)}</div>
+            <div className="text-muted-foreground">₹{allTotal.toFixed(2)}</div>
             </>
         )}
       </CardContent>

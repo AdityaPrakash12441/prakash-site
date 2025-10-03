@@ -14,8 +14,9 @@ export function PennywiseIcon({ className, ...props }: React.SVGProps<SVGSVGElem
       {...props}
     >
       <circle cx="12" cy="12" r="10" />
-      <path d="M12 6v12" />
-      <path d="M16 8h-4a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4h-4" />
+      <path d="M8 8h8" />
+      <path d="M8 12h8" />
+      <path d="M12 16h-4a4 4 0 0 0 0-8h4" />
     </svg>
   );
 }

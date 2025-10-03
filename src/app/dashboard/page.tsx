@@ -48,7 +48,7 @@ export default function DashboardPage() {
                     <Landmark className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">${totalIncome.toFixed(2)}</div> }
+                    {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">₹{totalIncome.toFixed(2)}</div> }
                     <p className="text-xs text-muted-foreground">
                     This month
                     </p>
@@ -62,7 +62,7 @@ export default function DashboardPage() {
                     <CreditCard className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">${totalExpenses.toFixed(2)}</div> }
+                {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">₹{totalExpenses.toFixed(2)}</div> }
                     <p className="text-xs text-muted-foreground">
                     This month
                     </p>
@@ -74,7 +74,7 @@ export default function DashboardPage() {
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">${balance.toFixed(2)}</div> }
+                {isLoading ? <Skeleton className="h-8 w-32" /> : <div className="text-2xl font-bold">₹{balance.toFixed(2)}</div> }
                     <p className="text-xs text-muted-foreground">
                     Current balance
                     </p>

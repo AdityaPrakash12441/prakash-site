@@ -119,7 +119,7 @@ export function TransactionList() {
       </TableHeader>
       <TableBody>
         {transactions && transactions.map((transaction) => {
-          const { icon: Icon, color } = categoryDetails[transaction.category];
+          const { icon: Icon, color } = (transaction.category && categoryDetails[transaction.category]) || { icon: MoreHorizontal, color: 'bg-gray-100 text-gray-800' };
           return (
             <TableRow key={transaction.id}>
               <TableCell className="font-medium">{transaction.description}</TableCell>
@@ -131,7 +131,7 @@ export function TransactionList() {
               </TableCell>
               <TableCell>{format(new Date(transaction.date), 'MMM d, yyyy')}</TableCell>
               <TableCell className={cn("text-right", transaction.type === 'income' ? 'text-green-600' : 'text-red-600')}>
-                {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                {transaction.type === 'income' ? '+' : '-'}₹{transaction.amount.toFixed(2)}
               </TableCell>
               <TableCell className="text-right">
                 <DropdownMenu>

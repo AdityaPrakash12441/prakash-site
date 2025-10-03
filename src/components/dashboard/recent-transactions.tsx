@@ -69,7 +69,7 @@ export function RecentTransactions() {
             ))
         )}
         {recentTransactions && recentTransactions.length > 0 && recentTransactions.map((transaction) => {
-            const Icon = categoryIcons[transaction.category] || MoreHorizontal;
+            const Icon = (transaction.category && categoryIcons[transaction.category]) || MoreHorizontal;
           return (
           <div key={transaction.id} className="flex items-center">
             <Avatar className="h-9 w-9">
@@ -82,7 +82,7 @@ export function RecentTransactions() {
               <p className="text-sm text-muted-foreground">{transaction.category}</p>
             </div>
             <div className={cn("ml-auto font-medium", transaction.type === 'income' ? 'text-green-600' : '')}>
-                {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                {transaction.type === 'income' ? '+' : '-'}₹{transaction.amount.toFixed(2)}
             </div>
           </div>
         )})}

@@ -9,7 +9,7 @@ import type { Budget, Category, Transaction } from '@/lib/types';
 import { AllCategories } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useUser, useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -40,7 +40,9 @@ export default function BudgetsPage() {
   useEffect(() => {
     if (budgets) {
       const budgetMap = budgets.reduce((acc, b) => {
-        acc[b.category] = b.amount.toString();
+        if (b.category && b.amount) {
+            acc[b.category] = b.amount.toString();
+        }
         return acc;
       }, {} as Record<string, string>);
       setEditingBudgets(budgetMap);
@@ -103,7 +105,9 @@ export default function BudgetsPage() {
   const spendingByCategory = useMemo(() => {
     if (!transactions) return {};
     return transactions.reduce((acc, t) => {
-      acc[t.category] = (acc[t.category] || 0) + t.amount;
+      if (t.category) {
+        acc[t.category] = (acc[t.category] || 0) + t.amount;
+      }
       return acc;
     }, {} as Record<Category, number>);
   }, [transactions]);
@@ -155,7 +159,7 @@ export default function BudgetsPage() {
                   <div className="flex justify-between items-center gap-4">
                       <Label htmlFor={`budget-${category}`} className="font-medium whitespace-nowrap">{category}</Label>
                       <div className="flex items-center gap-2 w-full max-w-xs">
-                          <span className="text-sm text-muted-foreground">$</span>
+                          <span className="text-sm text-muted-foreground">₹</span>
                           <Input
                               id={`budget-${category}`}
                               type="number"
@@ -170,9 +174,9 @@ export default function BudgetsPage() {
                     <>
                       <Progress value={progress} className="h-2" />
                       <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>Spent: ${spent.toFixed(2)}</span>
+                        <span>Spent: ₹{spent.toFixed(2)}</span>
                         <span className={cn(remaining < 0 ? 'text-red-500' : '')}>
-                          {remaining >= 0 ? `$${remaining.toFixed(2)} remaining` : `$${Math.abs(remaining).toFixed(2)} over`}
+                          {remaining >= 0 ? `₹${remaining.toFixed(2)} remaining` : `₹${Math.abs(remaining).toFixed(2)} over`}
                         </span>
                       </div>
                     </>
