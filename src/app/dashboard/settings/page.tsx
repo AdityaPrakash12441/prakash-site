@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -16,6 +16,9 @@ import { useToast } from '@/hooks/use-toast';
 import { transactions } from '@/lib/data';
 import { parseTransactionDetails } from '@/ai/flows/parse-transaction-details';
 import { Loader2, Sparkles } from 'lucide-react';
+import { useAuth, useUser, useFirestore } from '@/firebase';
+import { updateProfile } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg role="img" viewBox="0 0 24 24" {...props}>
@@ -28,8 +31,42 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function SettingsPage() {
     const { toast } = useToast();
+    const { user } = useUser();
+    const auth = useAuth();
+    const firestore = useFirestore();
+    const [name, setName] = useState('');
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
     const [emailBody, setEmailBody] = useState('');
     const [isParsing, setIsParsing] = useState(false);
+
+    useEffect(() => {
+        if (user?.displayName) {
+            setName(user.displayName);
+        }
+    }, [user]);
+
+
+    const handleProfileSave = async () => {
+        if (!auth.currentUser) return;
+        setIsSavingProfile(true);
+        try {
+            await updateProfile(auth.currentUser, { displayName: name });
+            const userRef = doc(firestore, 'users', auth.currentUser.uid);
+            await updateDoc(userRef, { name });
+            toast({
+                title: 'Profile Updated',
+                description: 'Your name has been updated successfully.',
+            });
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Could not update profile.',
+            });
+        } finally {
+            setIsSavingProfile(false);
+        }
+    }
 
     const handleDataExport = (format: 'json' | 'csv') => {
         let dataStr: string;
@@ -113,13 +150,16 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
-            <Input id="name" defaultValue="Your Name" />
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} disabled={isSavingProfile}/>
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" defaultValue="user@example.com" disabled />
+            <Input id="email" type="email" value={user?.email || ''} disabled />
           </div>
-          <Button>Save Changes</Button>
+          <Button onClick={handleProfileSave} disabled={isSavingProfile}>
+            {isSavingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save Changes
+            </Button>
         </CardContent>
       </Card>
 
