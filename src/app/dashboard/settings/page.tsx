@@ -13,12 +13,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { transactions } from '@/lib/data';
 import { parseTransactionDetails } from '@/ai/flows/parse-transaction-details';
 import { Loader2, Sparkles } from 'lucide-react';
-import { useAuth, useUser, useFirestore } from '@/firebase';
+import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, orderBy } from 'firebase/firestore';
+import type { Transaction } from '@/lib/types';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg role="img" viewBox="0 0 24 24" {...props}>
@@ -39,6 +39,13 @@ export default function SettingsPage() {
     const [emailBody, setEmailBody] = useState('');
     const [isParsing, setIsParsing] = useState(false);
 
+    const transactionsQuery = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return query(collection(firestore, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
+    }, [user, firestore]);
+
+    const { data: transactions } = useCollection<Transaction>(transactionsQuery);
+
     useEffect(() => {
         if (user?.displayName) {
             setName(user.displayName);
@@ -47,7 +54,7 @@ export default function SettingsPage() {
 
 
     const handleProfileSave = async () => {
-        if (!auth.currentUser) return;
+        if (!auth.currentUser || !firestore) return;
         setIsSavingProfile(true);
         try {
             await updateProfile(auth.currentUser, { displayName: name });
@@ -69,17 +76,30 @@ export default function SettingsPage() {
     }
 
     const handleDataExport = (format: 'json' | 'csv') => {
+        if (!transactions || transactions.length === 0) {
+            toast({
+                title: "No data to export",
+                description: "You don't have any transactions to export yet.",
+                variant: "destructive"
+            });
+            return;
+        }
+
         let dataStr: string;
         let fileName: string;
 
+        // Create a new array without the 'userId' field
+        const exportableTransactions = transactions.map(({ userId, ...rest }) => rest);
+
         if (format === 'json') {
-            dataStr = JSON.stringify(transactions, null, 2);
+            dataStr = JSON.stringify(exportableTransactions, null, 2);
             fileName = 'transactions.json';
         } else {
-            const headers = Object.keys(transactions[0]);
+            if (exportableTransactions.length === 0) return;
+            const headers = Object.keys(exportableTransactions[0]);
             const csvRows = [
                 headers.join(','),
-                ...transactions.map(row => headers.map(header => JSON.stringify(row[header as keyof typeof row])).join(','))
+                ...exportableTransactions.map(row => headers.map(header => JSON.stringify(row[header as keyof typeof row])).join(','))
             ];
             dataStr = csvRows.join('\n');
             fileName = 'transactions.csv';
