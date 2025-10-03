@@ -12,9 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { updateProfile } from 'firebase/auth';
+import { updateProfile, linkWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, updateDoc, collection, query, orderBy } from 'firebase/firestore';
 import type { Transaction } from '@/lib/types';
 
@@ -34,6 +34,7 @@ export default function SettingsPage() {
     const firestore = useFirestore();
     const [name, setName] = useState('');
     const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [isLinking, setIsLinking] = useState(false);
 
     const transactionsQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
@@ -41,6 +42,8 @@ export default function SettingsPage() {
     }, [user, firestore]);
 
     const { data: transactions } = useCollection<Transaction>(transactionsQuery);
+
+    const isGoogleLinked = user?.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID) || false;
 
     useEffect(() => {
         if (user?.displayName) {
@@ -68,6 +71,27 @@ export default function SettingsPage() {
             });
         } finally {
             setIsSavingProfile(false);
+        }
+    }
+
+    const handleGmailConnect = async () => {
+        if (!auth.currentUser || isGoogleLinked) return;
+        setIsLinking(true);
+        const provider = new GoogleAuthProvider();
+        try {
+            await linkWithPopup(auth.currentUser, provider);
+            toast({
+                title: "Account Connected",
+                description: "Your Google account has been successfully linked.",
+            });
+        } catch(error: any) {
+            toast({
+                variant: "destructive",
+                title: "Linking Failed",
+                description: "Could not link Google account. It might be associated with another user.",
+            })
+        } finally {
+            setIsLinking(false);
         }
     }
 
@@ -153,10 +177,17 @@ export default function SettingsPage() {
           <CardDescription>Connect your email to automatically scan for transactions.</CardDescription>
         </CardHeader>
         <CardContent>
-            <Button variant="outline">
-                <GoogleIcon className="mr-2 h-4 w-4" />
-                Connect Gmail Account
-            </Button>
+            {isGoogleLinked ? (
+                <div className="flex items-center text-green-600 font-medium">
+                    <CheckCircle className="mr-2 h-5 w-5" />
+                    <p>Gmail Account Connected</p>
+                </div>
+            ) : (
+                <Button variant="outline" onClick={handleGmailConnect} disabled={isLinking}>
+                    {isLinking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GoogleIcon className="mr-2 h-4 w-4" />}
+                    Connect Gmail Account
+                </Button>
+            )}
         </CardContent>
       </Card>
 
@@ -172,4 +203,3 @@ export default function SettingsPage() {
       </Card>
     </div>
   );
-}
